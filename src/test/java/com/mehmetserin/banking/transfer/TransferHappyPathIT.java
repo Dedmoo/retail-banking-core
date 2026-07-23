@@ -28,7 +28,7 @@ class TransferHappyPathIT extends PostgresIntegrationSupport {
 
     @Test
     void transferMovesMoneyBetweenTwoOwnAccountsAndIsIdempotentOnRetry() {
-        String token = registerAndGetToken("carol");
+        String token = registerAndGetToken("happy-" + java.util.UUID.randomUUID().toString().substring(0, 8));
 
         AccountResponse source = createAccount(token, "USD", "500.00");
         AccountResponse destination = createAccount(token, "USD", "0.00");

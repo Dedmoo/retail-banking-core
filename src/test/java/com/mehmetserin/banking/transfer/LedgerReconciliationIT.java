@@ -39,7 +39,7 @@ class LedgerReconciliationIT extends PostgresIntegrationSupport {
 
     @Test
     void storedBalanceMatchesLedgerAfterOpeningAndTransfer() {
-        String token = registerAndGetToken("erin");
+        String token = registerAndGetToken("recon-" + java.util.UUID.randomUUID().toString().substring(0, 8));
 
         AccountResponse source = createAccount(token, "USD", "200.00");
         AccountResponse destination = createAccount(token, "USD", "0.00");
@@ -73,7 +73,7 @@ class LedgerReconciliationIT extends PostgresIntegrationSupport {
 
     @Test
     void ledgerEntriesRejectUpdateAndDelete() {
-        String token = registerAndGetToken("frank");
+        String token = registerAndGetToken("append-" + java.util.UUID.randomUUID().toString().substring(0, 8));
         AccountResponse account = createAccount(token, "USD", "50.00");
 
         UUID ledgerId = jdbcTemplate.queryForObject(

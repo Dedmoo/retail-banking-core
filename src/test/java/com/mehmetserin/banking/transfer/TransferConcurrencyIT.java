@@ -39,7 +39,7 @@ class TransferConcurrencyIT extends PostgresIntegrationSupport {
 
     @Test
     void concurrentTransfersFromTheSameAccountNeverOverdrawIt() throws Exception {
-        String token = registerAndGetToken("dave");
+        String token = registerAndGetToken("conc-" + java.util.UUID.randomUUID().toString().substring(0, 8));
 
         AccountResponse source = createAccount(token, "USD", "100.00");
         AccountResponse destinationOne = createAccount(token, "USD", "0.00");

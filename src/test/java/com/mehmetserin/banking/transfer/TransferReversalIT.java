@@ -31,7 +31,7 @@ class TransferReversalIT extends PostgresIntegrationSupport {
 
     @Test
     void reverseRestoresBalancesAndIsIdempotent() {
-        String token = registerAndGetToken("gina");
+        String token = registerAndGetToken("rev-" + java.util.UUID.randomUUID().toString().substring(0, 8));
         AccountResponse source = createAccount(token, "USD", "300.00");
         AccountResponse destination = createAccount(token, "USD", "0.00");
 

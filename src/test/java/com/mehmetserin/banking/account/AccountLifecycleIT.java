@@ -29,7 +29,7 @@ class AccountLifecycleIT extends PostgresIntegrationSupport {
 
     @Test
     void freezeBlocksTransferAndCloseRequiresZeroBalance() {
-        String token = registerAndGetToken("dave");
+        String token = registerAndGetToken("life-" + java.util.UUID.randomUUID().toString().substring(0, 8));
 
         AccountResponse funded = createAccount(token, "USD", "100.00");
         AccountResponse empty = createAccount(token, "USD", "0.00");
