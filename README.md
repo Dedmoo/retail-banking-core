@@ -177,3 +177,6 @@ daemon available, so both suites run on every push/PR.
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+> CI note: integration tests register unique usernames per class (shared Testcontainers Postgres).
+
