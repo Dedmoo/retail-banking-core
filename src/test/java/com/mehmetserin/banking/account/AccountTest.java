@@ -1,6 +1,7 @@
 package com.mehmetserin.banking.account;
 
 import com.mehmetserin.banking.common.exception.InsufficientFundsException;
+import com.mehmetserin.banking.common.exception.InvalidAccountStateException;
 import com.mehmetserin.banking.common.exception.InvalidTransferException;
 import org.junit.jupiter.api.Test;
 
@@ -75,20 +76,31 @@ class AccountTest {
 
     @Test
     void closedAccountRejectsDebitAndCredit() {
-        Account account = newAccount("100.00");
-        closeAccount(account);
+        Account account = newAccount("0.00");
+        account.close();
 
         assertThatThrownBy(() -> account.debit(new BigDecimal("1.00"))).isInstanceOf(InvalidTransferException.class);
         assertThatThrownBy(() -> account.credit(new BigDecimal("1.00"))).isInstanceOf(InvalidTransferException.class);
     }
 
-    private void closeAccount(Account account) {
-        try {
-            var field = Account.class.getDeclaredField("status");
-            field.setAccessible(true);
-            field.set(account, AccountStatus.CLOSED);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException(e);
-        }
+    @Test
+    void freezeBlocksMoneyMovementUntilUnfreeze() {
+        Account account = newAccount("100.00");
+        account.freeze();
+
+        assertThat(account.getStatus()).isEqualTo(AccountStatus.FROZEN);
+        assertThatThrownBy(() -> account.debit(new BigDecimal("1.00"))).isInstanceOf(InvalidTransferException.class);
+
+        account.unfreeze();
+        account.debit(new BigDecimal("1.00"));
+        assertThat(account.getBalance()).isEqualByComparingTo("99.00");
+    }
+
+    @Test
+    void closeRequiresZeroBalance() {
+        Account account = newAccount("10.00");
+
+        assertThatThrownBy(account::close).isInstanceOf(InvalidAccountStateException.class);
+        assertThat(account.getStatus()).isEqualTo(AccountStatus.ACTIVE);
     }
 }

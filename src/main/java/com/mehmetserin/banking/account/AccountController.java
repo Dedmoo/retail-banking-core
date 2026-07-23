@@ -42,4 +42,22 @@ public class AccountController {
                                                         @PathVariable UUID accountId) {
         return ResponseEntity.ok(accountService.getMyAccount(username, accountId));
     }
+
+    @PostMapping("/{accountId}/freeze")
+    public ResponseEntity<AccountResponse> freeze(@AuthenticationPrincipal String username,
+                                                    @PathVariable UUID accountId) {
+        return ResponseEntity.ok(accountService.freeze(username, accountId));
+    }
+
+    @PostMapping("/{accountId}/unfreeze")
+    public ResponseEntity<AccountResponse> unfreeze(@AuthenticationPrincipal String username,
+                                                      @PathVariable UUID accountId) {
+        return ResponseEntity.ok(accountService.unfreeze(username, accountId));
+    }
+
+    @PostMapping("/{accountId}/close")
+    public ResponseEntity<AccountResponse> close(@AuthenticationPrincipal String username,
+                                                   @PathVariable UUID accountId) {
+        return ResponseEntity.ok(accountService.close(username, accountId));
+    }
 }

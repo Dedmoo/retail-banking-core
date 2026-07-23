@@ -1,6 +1,6 @@
 # Architecture
 
-C4 and component views for **retail-banking-core**. This is a portfolio MVP, not a production bank core.
+C4 and component views for RetailBankingCore. Portfolio service, not a production bank core.
 
 ## C4 Context
 
@@ -61,6 +61,7 @@ flowchart TB
   AuthC --> AuthS --> Users
   AuthS --> JwtS
   AccC --> AccS --> Accounts
+  AccS --> Ledger
   TrfC --> RateF --> TrfS
   TrfS --> Accounts
   TrfS --> Transfers
@@ -68,8 +69,14 @@ flowchart TB
   JwtF --> JwtS
 ```
 
+## Ledger rules
+
+- `OPENING`: one CREDIT, `transfer_id` null (funding into the product; no equity contra account here)
+- `TRANSFER`: paired DEBIT + CREDIT with the same `transfer_id`
+- Table is append-only (Postgres triggers reject UPDATE/DELETE)
+- `accounts.balance` must equal Σ CREDIT − Σ DEBIT (`LedgerReconciliationService`)
+
 ## Runtime packaging
 
-- Local / CI: JVM process + Postgres (Docker Compose or Testcontainers)
-- `docker compose up --build`: app image + Postgres 16 on one network
-- Schema only via Flyway (`V1__init_schema.sql`), no `ddl-auto`
+- Local / CI: JVM + Postgres (Compose or Testcontainers)
+- Schema only via Flyway (`V1`, `V2`), Hibernate `ddl-auto=validate`

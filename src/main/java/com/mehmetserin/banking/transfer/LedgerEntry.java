@@ -18,7 +18,7 @@ public class LedgerEntry {
     @Id
     private UUID id;
 
-    @Column(name = "transfer_id", nullable = false)
+    @Column(name = "transfer_id")
     private UUID transferId;
 
     @Column(name = "account_id", nullable = false)
@@ -27,6 +27,10 @@ public class LedgerEntry {
     @Enumerated(EnumType.STRING)
     @Column(name = "entry_type", nullable = false, length = 10)
     private LedgerEntryType entryType;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "posting_kind", nullable = false, length = 20)
+    private LedgerPostingKind postingKind;
 
     @Column(nullable = false, precision = 19, scale = 4)
     private BigDecimal amount;
@@ -37,11 +41,21 @@ public class LedgerEntry {
     protected LedgerEntry() {
     }
 
-    public LedgerEntry(UUID transferId, UUID accountId, LedgerEntryType entryType, BigDecimal amount) {
+    public static LedgerEntry forTransfer(UUID transferId, UUID accountId, LedgerEntryType entryType, BigDecimal amount) {
+        return new LedgerEntry(transferId, accountId, entryType, LedgerPostingKind.TRANSFER, amount);
+    }
+
+    public static LedgerEntry forOpening(UUID accountId, BigDecimal amount) {
+        return new LedgerEntry(null, accountId, LedgerEntryType.CREDIT, LedgerPostingKind.OPENING, amount);
+    }
+
+    private LedgerEntry(UUID transferId, UUID accountId, LedgerEntryType entryType,
+                        LedgerPostingKind postingKind, BigDecimal amount) {
         this.id = UUID.randomUUID();
         this.transferId = transferId;
         this.accountId = accountId;
         this.entryType = entryType;
+        this.postingKind = postingKind;
         this.amount = amount;
         this.createdAt = Instant.now();
     }
@@ -60,6 +74,10 @@ public class LedgerEntry {
 
     public LedgerEntryType getEntryType() {
         return entryType;
+    }
+
+    public LedgerPostingKind getPostingKind() {
+        return postingKind;
     }
 
     public BigDecimal getAmount() {

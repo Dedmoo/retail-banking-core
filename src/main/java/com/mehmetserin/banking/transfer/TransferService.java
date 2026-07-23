@@ -115,8 +115,8 @@ public class TransferService {
                 request.amount(), request.currency());
         transferRepository.saveAndFlush(transfer);
 
-        ledgerEntryRepository.save(new LedgerEntry(transfer.getId(), fromAccount.getId(), LedgerEntryType.DEBIT, request.amount()));
-        ledgerEntryRepository.save(new LedgerEntry(transfer.getId(), toAccount.getId(), LedgerEntryType.CREDIT, request.amount()));
+        ledgerEntryRepository.save(LedgerEntry.forTransfer(transfer.getId(), fromAccount.getId(), LedgerEntryType.DEBIT, request.amount()));
+        ledgerEntryRepository.save(LedgerEntry.forTransfer(transfer.getId(), toAccount.getId(), LedgerEntryType.CREDIT, request.amount()));
 
         return transfer;
     }

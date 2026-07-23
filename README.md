@@ -1,39 +1,43 @@
 # Retail Banking Core
 
-[![CI](https://github.com/Dedmoo/retail-banking-core/actions/workflows/ci.yml/badge.svg)](https://github.com/Dedmoo/retail-banking-core/actions/workflows/ci.yml)
+[![CI](https://github.com/Dedmoo/RetailBankingCore/actions/workflows/ci.yml/badge.svg)](https://github.com/Dedmoo/RetailBankingCore/actions/workflows/ci.yml)
 
-A small retail-banking monolith: register/login with JWT, open accounts, and move money between
-accounts as a real double-entry transfer, backed by Postgres with Flyway-versioned schema.
+Retail banking monolith: JWT register/login, accounts with freeze/close, money movement as
+double-entry ledger posts (opening CREDIT + transfer DEBIT/CREDIT), Postgres + Flyway.
 
-Built with **Java 17** and **Spring Boot 3.3**. Portfolio MVP, not a bank core. Scope table below says what is in and what is out.
+Java 17 / Spring Boot 3.3. Portfolio service, not a bank core.
 
 ## Documentation
 
 | Doc | Content |
 |-----|---------|
 | [docs/architecture.md](docs/architecture.md) | C4 context/container, component view, packaging |
-| [docs/uml.md](docs/uml.md) | Transfer sequences, class diagram, ER (Flyway V1) |
+| [docs/uml.md](docs/uml.md) | Transfer sequences, class diagram, ER (Flyway V1–V2) |
 
 ## Scope (honest)
 
 | Capability | Status |
 |------------|--------|
 | Register / login with JWT (Spring Security, stateless) | Implemented |
-| Account creation with an opening balance, single currency per account | Implemented |
-| Double-entry transfer between two accounts (one `DEBIT` + one `CREDIT` ledger line per transfer) | Implemented |
+| Account creation; positive opening balance posts an `OPENING` ledger CREDIT | Implemented |
+| Freeze / unfreeze / close (close only when balance is zero) | Implemented |
+| Double-entry transfer (`TRANSFER` DEBIT + CREDIT lines, `transfer_id` set) | Implemented |
+| Ledger append-only in Postgres (UPDATE/DELETE blocked by trigger) | Implemented |
+| Reconciliation: account.balance = Σ CREDIT − Σ DEBIT | Implemented (service + IT) |
 | Idempotency key on transfers (`Idempotency-Key` header, required) | Implemented |
 | Debit authorization: source account must belong to the caller | Implemented |
-| Pessimistic row locking (`SELECT ... FOR UPDATE`) so concurrent transfers can't overdraw an account | Implemented |
-| Per-user rate limiting on the transfer endpoint (Bucket4j, in-memory) | Implemented |
-| Postgres schema managed by Flyway migrations (no `ddl-auto`/`EnsureCreated`) | Implemented |
-| Actuator health endpoint | Implemented |
-| Testcontainers integration tests: happy-path transfer, concurrent-transfer safety | Implemented |
-| Multi-currency accounts / FX conversion | Not included |
-| Multi-tenant SaaS (organizations, branches, roles beyond a single user role) | Not included |
-| Card issuance, payments, loans, statements, interest | Not included |
-| Refresh tokens, token revocation/blocklist, password reset flow | Not included |
-| Distributed rate limiting (Redis) — current limiter is per-instance, in-memory | Not included |
-| Audit logging, KYC/AML, fraud detection | Not included |
+| Pessimistic row locking (`SELECT ... FOR UPDATE`), lock order by account id | Implemented |
+| Per-user rate limiting on transfers (Bucket4j, in-memory) | Implemented |
+| Response security headers (`no-store`, `nosniff`, `DENY` frame) | Implemented |
+| Flyway schema (no Hibernate `ddl-auto` mutate) | Implemented |
+| Actuator health | Implemented |
+| Testcontainers ITs: transfer, concurrency, lifecycle, ledger recon | Implemented |
+| Multi-currency / FX | Not included |
+| Multi-tenant orgs, roles beyond single user | Not included |
+| Cards, loans, statements, interest | Not included |
+| Refresh tokens, revocation, password reset | Not included |
+| Distributed rate limit (Redis) | Not included |
+| KYC/AML, fraud, full audit event stream | Not included |
 
 ## Architecture
 
@@ -73,19 +77,17 @@ sequenceDiagram
 
 ## Domain rules enforced
 
-- An account can only move money while `ACTIVE`, and only for a strictly positive amount.
-- The source account must belong to the authenticated user (debit authorization). Credit to
-  another user's account is allowed.
-- A debit that would take the balance below zero throws `InsufficientFundsException`, enforced
-  inside the `Account` entity itself (`debit`/`credit`), not just in the service layer.
-- A transfer's source and destination accounts must share the same currency as each other and as
-  the request; a transfer to the same account is rejected.
-- Every transfer produces exactly two ledger lines (one `DEBIT`, one `CREDIT`) for the same amount,
-  so the ledger always balances.
-- The two accounts involved in a transfer are locked in a fixed order (lower account id first),
-  regardless of which one is the source, so two transfers can never deadlock each other.
-- A retried request with the same `Idempotency-Key` (scoped per user) returns the original transfer
-  instead of moving money again. Blank keys and keys longer than 100 characters are rejected.
+- Money movement only while `ACTIVE` and only for a strictly positive amount. `FROZEN` and
+  `CLOSED` reject debit/credit.
+- Close requires a zero balance; freeze/unfreeze are owner-only HTTP actions.
+- Source account must belong to the caller. Credit to another user's account is allowed (P2P).
+- Insufficient funds throws `InsufficientFundsException` inside `Account.debit`.
+- Transfer accounts must share currency with each other and the request; same-account transfer rejected.
+- Positive opening balance → one `OPENING` CREDIT (external funding, no contra account in this MVP).
+  Each transfer → one `TRANSFER` DEBIT and one `TRANSFER` CREDIT for the same amount.
+- Account balance must equal signed ledger sum; ITs assert this after open and transfer.
+- Accounts locked in fixed id order under `FOR UPDATE` to avoid deadlock and overdraw races.
+- Same `Idempotency-Key` per user replays the original transfer. Blank / over-long keys rejected.
 
 ## API
 
@@ -93,10 +95,13 @@ sequenceDiagram
 |--------|------|------|--------------|
 | `POST` | `/api/auth/register` | none | Create a user, returns a JWT |
 | `POST` | `/api/auth/login` | none | Returns a JWT |
-| `POST` | `/api/accounts` | JWT | Open an account with a currency + opening balance |
+| `POST` | `/api/accounts` | JWT | Open an account (currency + opening balance) |
 | `GET` | `/api/accounts` | JWT | List the caller's accounts |
-| `GET` | `/api/accounts/{id}` | JWT | Get one of the caller's accounts |
-| `POST` | `/api/transfers` | JWT + `Idempotency-Key` header | Double-entry transfer between two accounts |
+| `GET` | `/api/accounts/{id}` | JWT | Get one owned account |
+| `POST` | `/api/accounts/{id}/freeze` | JWT | Freeze (blocks transfers) |
+| `POST` | `/api/accounts/{id}/unfreeze` | JWT | Return to ACTIVE |
+| `POST` | `/api/accounts/{id}/close` | JWT | Close when balance is zero |
+| `POST` | `/api/transfers` | JWT + `Idempotency-Key` | Double-entry transfer |
 | `GET` | `/api/transfers/{id}` | JWT | Get a transfer the caller initiated |
 | `GET` | `/actuator/health` | none | Liveness/readiness probe |
 
@@ -149,15 +154,11 @@ Two test suites, run at different Maven phases on purpose:
 ./mvnw verify     # unit tests + Testcontainers integration tests — needs a Docker daemon
 ```
 
-- **Unit tests** (`*Test.java`, run by Surefire in the `test` phase): domain invariants on
-  `Account` (debit/credit, insufficient funds, closed-account rejection), `TransferService`
-  orchestration with mocked repositories (idempotency replay, same-account/currency rejection,
-  lock ordering), and `JwtService` token generation/validation.
-- **Integration tests** (`*IT.java`, run by Failsafe in the `verify` phase, each spinning up a real
-  Postgres via Testcontainers): `TransferHappyPathIT` drives the full register → open accounts →
-  transfer → idempotent retry flow over HTTP, and `TransferConcurrencyIT` fires two transfers at
-  the same source account at once and asserts exactly one succeeds and the account never goes
-  negative — the actual proof that the pessimistic locking works, not just a mock-based assertion.
+- **Unit tests** (`*Test.java`): `Account` invariants (funds, freeze/close), `TransferService`
+  mocks (idempotency, lock order, ownership), `JwtService`.
+- **Integration tests** (`*IT.java`, Failsafe + Testcontainers Postgres): happy-path transfer,
+  concurrent overdraw safety, account freeze/close lifecycle, ledger reconciliation and
+  append-only trigger.
 
 CI (`.github/workflows/ci.yml`) runs `./mvnw -B verify` on `ubuntu-latest`, which has a Docker
 daemon available, so both suites run on every push/PR.

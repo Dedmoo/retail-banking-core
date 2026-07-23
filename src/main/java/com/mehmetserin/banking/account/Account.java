@@ -1,6 +1,7 @@
 package com.mehmetserin.banking.account;
 
 import com.mehmetserin.banking.common.exception.InsufficientFundsException;
+import com.mehmetserin.banking.common.exception.InvalidAccountStateException;
 import com.mehmetserin.banking.common.exception.InvalidTransferException;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -14,10 +15,8 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * A single-currency account. Balance mutation is only ever done through
- * {@link #debit(BigDecimal)} and {@link #credit(BigDecimal)} so the invariants
- * (no negative balance, no zero/negative amount movement, no movement on a
- * closed account) hold no matter which service calls into this entity.
+ * Single-currency account. Balance changes go through {@link #debit} / {@link #credit};
+ * callers must also post matching ledger rows (opening CREDIT or transfer DEBIT/CREDIT).
  */
 @Entity
 @Table(name = "accounts")
@@ -74,6 +73,33 @@ public class Account {
         requireActive();
         requirePositive(amount);
         balance = balance.add(amount);
+    }
+
+    public void freeze() {
+        if (status == AccountStatus.CLOSED) {
+            throw new InvalidAccountStateException("Closed account cannot be frozen");
+        }
+        if (status == AccountStatus.FROZEN) {
+            throw new InvalidAccountStateException("Account is already frozen");
+        }
+        status = AccountStatus.FROZEN;
+    }
+
+    public void unfreeze() {
+        if (status != AccountStatus.FROZEN) {
+            throw new InvalidAccountStateException("Only a frozen account can be unfrozen");
+        }
+        status = AccountStatus.ACTIVE;
+    }
+
+    public void close() {
+        if (status == AccountStatus.CLOSED) {
+            throw new InvalidAccountStateException("Account is already closed");
+        }
+        if (balance.compareTo(BigDecimal.ZERO) != 0) {
+            throw new InvalidAccountStateException("Account balance must be zero before close");
+        }
+        status = AccountStatus.CLOSED;
     }
 
     private void requireActive() {
